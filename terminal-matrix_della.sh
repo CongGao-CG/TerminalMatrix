@@ -1,249 +1,92 @@
 #!/bin/bash
 
+# Terminal grid arrangement script for Linux using tmux
+# Works without requiring sudo/package installation
+
 ROWS=${1:-2}
 COLS=${2:-2}
 
-echo "Arranging Terminal in ${ROWS}x${COLS} grid..."
-
-# Preserve terminal environment variables
-export TERM="${TERM:-xterm-256color}"
-export COLORTERM="${COLORTERM}"
-
-# Ensure X resources are loaded (for xterm/urxvt)
-if [ -f "$HOME/.Xresources" ] && command -v xrdb &> /dev/null; then
-    xrdb -merge "$HOME/.Xresources" 2>/dev/null
-fi
-
-# For gnome-terminal: Create a temporary profile with white text if needed
-GNOME_TERMINAL_PROFILE=""
-if command -v gnome-terminal &> /dev/null && command -v dconf &> /dev/null; then
-    # Check if we can access gnome-terminal settings
-    if dconf list /org/gnome/terminal/legacy/profiles:/ &>/dev/null; then
-        # Get default profile ID
-        DEFAULT_PROFILE=$(dconf read /org/gnome/terminal/legacy/profiles:/default 2>/dev/null | tr -d "'")
-        if [ -n "$DEFAULT_PROFILE" ]; then
-            GNOME_TERMINAL_PROFILE="--profile=$DEFAULT_PROFILE"
-        fi
-    fi
-fi
-
-# Detect available terminal emulator
-TERMINAL=""
-if command -v gnome-terminal &> /dev/null; then
-    TERMINAL="gnome-terminal"
-elif command -v konsole &> /dev/null; then
-    TERMINAL="konsole"
-elif command -v xterm &> /dev/null; then
-    TERMINAL="xterm"
-elif command -v urxvt &> /dev/null; then
-    TERMINAL="urxvt"
-elif command -v terminator &> /dev/null; then
-    TERMINAL="terminator"
-else
-    echo "Error: No supported terminal emulator found"
-    exit 1
-fi
-
-echo "Using terminal: $TERMINAL"
-
-# Detect available window management tools
-HAS_XDOTOOL=false
-HAS_WMCTRL=false
-if command -v xdotool &> /dev/null; then
-    HAS_XDOTOOL=true
-    echo "Found xdotool for window management"
-fi
-if command -v wmctrl &> /dev/null; then
-    HAS_WMCTRL=true
-    echo "Found wmctrl for window management"
-fi
-
-# Get screen dimensions
-if command -v xdpyinfo &> /dev/null; then
-    SCREEN_DIM=$(xdpyinfo | grep dimensions | sed -r 's/^[^0-9]*([0-9]+x[0-9]+).*$/\1/')
-    SCREEN_WIDTH=$(echo $SCREEN_DIM | cut -d'x' -f1)
-    SCREEN_HEIGHT=$(echo $SCREEN_DIM | cut -d'x' -f2)
-elif command -v xrandr &> /dev/null; then
-    # Fallback to xrandr
-    SCREEN_DIM=$(xrandr | grep ' connected' | head -1 | grep -o '[0-9]\+x[0-9]\+')
-    SCREEN_WIDTH=$(echo $SCREEN_DIM | cut -d'x' -f1)
-    SCREEN_HEIGHT=$(echo $SCREEN_DIM | cut -d'x' -f2)
-else
-    # Default values if we can't detect
-    SCREEN_WIDTH=1920
-    SCREEN_HEIGHT=1080
-    echo "Warning: Could not detect screen size, using default ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
-fi
-
-# Calculate window dimensions
-WIDTH=$((SCREEN_WIDTH / COLS))
-HEIGHT=$((SCREEN_HEIGHT / ROWS))
-
-# Adjust for window decorations and panels
-WIDTH=$((WIDTH - 10))
-HEIGHT=$((HEIGHT - 50))
-
-echo "Screen: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}, Window size: ${WIDTH}x${HEIGHT}"
-
-# Function to open terminal with geometry
-open_terminal_with_geometry() {
-    local x=$1
-    local y=$2
-    local w=$3
-    local h=$4
+# Check if tmux is available
+if ! command -v tmux &> /dev/null; then
+    echo "Error: tmux is not available on this system"
+    echo "Trying alternative method with xterm..."
     
-    case $TERMINAL in
-        gnome-terminal)
-            # gnome-terminal uses character-based geometry
-            local cols=$((w / 8))  # Approximate character width
-            local rows=$((h / 16)) # Approximate character height
-            # Force white foreground and load bash profile
-            gnome-terminal $GNOME_TERMINAL_PROFILE --window --geometry="${cols}x${rows}+${x}+${y}" -- bash -c 'source ~/.bashrc 2>/dev/null; source ~/.bash_profile 2>/dev/null; exec bash' &
-            ;;
-        konsole)
-            # Load default profile
-            konsole --profile "$USER" --geometry "${w}x${h}+${x}+${y}" &
-            ;;
-        xterm)
-            # xterm uses character-based geometry
-            local cols=$((w / 8))
-            local rows=$((h / 16))
-            # Load X resources for proper colors
-            xterm -ls -geometry "${cols}x${rows}+${x}+${y}" &
-            ;;
-        urxvt)
-            # urxvt uses character-based geometry
-            local cols=$((w / 8))
-            local rows=$((h / 16))
-            # Load X resources
-            urxvt -ls -geometry "${cols}x${rows}+${x}+${y}" &
-            ;;
-        terminator)
-            terminator --geometry="${w}x${h}+${x}+${y}" &
-            ;;
-    esac
-    
-    sleep 0.5
-}
-
-# Function to move window using available tools
-move_window() {
-    local window_id=$1
-    local x=$2
-    local y=$3
-    local w=$4
-    local h=$5
-    
-    if [ "$HAS_XDOTOOL" = true ]; then
-        xdotool windowmove "$window_id" "$x" "$y"
-        xdotool windowsize "$window_id" "$w" "$h"
-    elif [ "$HAS_WMCTRL" = true ]; then
-        wmctrl -i -r "$window_id" -e "0,$x,$y,$w,$h"
-    fi
-}
-
-# Create and position windows
-TOTAL=$((ROWS * COLS))
-declare -a WINDOW_IDS
-
-# Method 1: Try to use terminal geometry options
-if [ "$HAS_XDOTOOL" = false ] && [ "$HAS_WMCTRL" = false ]; then
-    echo "No window management tools found, using terminal geometry options..."
-    
-    for ((r=0; r<ROWS; r++)); do
-        for ((c=0; c<COLS; c++)); do
-            X=$((c * WIDTH))
-            Y=$((r * HEIGHT))
-            
-            open_terminal_with_geometry $X $Y $WIDTH $HEIGHT
-        done
-    done
-else
-    # Method 2: Open terminals and then move them
-    echo "Opening $TOTAL terminal windows..."
-    
-    # Get initial window list
-    if [ "$HAS_XDOTOOL" = true ]; then
-        BEFORE_WINDOWS=$(xdotool search --class "$TERMINAL" 2>/dev/null | sort)
-    elif [ "$HAS_WMCTRL" = true ]; then
-        BEFORE_WINDOWS=$(wmctrl -l | grep -i "$TERMINAL" | awk '{print $1}' | sort)
-    fi
-    
-    # Open all terminals
-    for ((i=1; i<=TOTAL; i++)); do
-        case $TERMINAL in
-            gnome-terminal)
-                gnome-terminal $GNOME_TERMINAL_PROFILE --window -- bash -c 'source ~/.bashrc 2>/dev/null; source ~/.bash_profile 2>/dev/null; exec bash' &
-                ;;
-            konsole)
-                konsole --profile "$USER" &
-                ;;
-            xterm)
-                xterm -ls &
-                ;;
-            urxvt)
-                urxvt -ls &
-                ;;
-            terminator)
-                terminator &
-                ;;
-        esac
-        sleep 0.3
-    done
-    
-    # Wait a bit for all windows to open
-    sleep 1
-    
-    # Get new window list
-    if [ "$HAS_XDOTOOL" = true ]; then
-        AFTER_WINDOWS=$(xdotool search --class "$TERMINAL" 2>/dev/null | sort)
-        NEW_WINDOWS=$(comm -13 <(echo "$BEFORE_WINDOWS") <(echo "$AFTER_WINDOWS"))
-    elif [ "$HAS_WMCTRL" = true ]; then
-        AFTER_WINDOWS=$(wmctrl -l | grep -i "$TERMINAL" | awk '{print $1}' | sort)
-        NEW_WINDOWS=$(comm -13 <(echo "$BEFORE_WINDOWS") <(echo "$AFTER_WINDOWS"))
-    fi
-    
-    # Convert to array
-    readarray -t WINDOW_IDS <<< "$NEW_WINDOWS"
-    
-    # Position windows
-    echo "Positioning windows..."
-    WINDOW_INDEX=0
-    
-    for ((r=0; r<ROWS; r++)); do
-        for ((c=0; c<COLS; c++)); do
-            if [ $WINDOW_INDEX -lt ${#WINDOW_IDS[@]} ]; then
+    # Alternative: Try to use xterm if available
+    if command -v xterm &> /dev/null; then
+        echo "Opening ${ROWS}x${COLS} xterm windows..."
+        WIDTH=$((1920 / COLS))  # Adjust based on your screen resolution
+        HEIGHT=$((1080 / ROWS))  # Adjust based on your screen resolution
+        
+        for ((r=0; r<ROWS; r++)); do
+            for ((c=0; c<COLS; c++)); do
                 X=$((c * WIDTH))
                 Y=$((r * HEIGHT))
-                
-                WINDOW_ID=${WINDOW_IDS[$WINDOW_INDEX]}
-                if [ ! -z "$WINDOW_ID" ]; then
-                    move_window "$WINDOW_ID" "$X" "$Y" "$WIDTH" "$HEIGHT"
-                fi
-                
-                WINDOW_INDEX=$((WINDOW_INDEX + 1))
-            fi
+                xterm -geometry 80x24+${X}+${Y} &
+                sleep 0.1
+            done
+        done
+        echo "Done! Opened $((ROWS * COLS)) xterm windows"
+    else
+        echo "Neither tmux nor xterm is available. Please contact your system administrator."
+        exit 1
+    fi
+    exit 0
+fi
+
+# Using tmux for terminal grid
+SESSION_NAME="grid_$$"  # Use PID to make session name unique
+
+echo "Creating ${ROWS}x${COLS} terminal grid using tmux..."
+
+# Kill existing session if it exists
+tmux kill-session -t $SESSION_NAME 2>/dev/null
+
+# Create new tmux session
+tmux new-session -d -s $SESSION_NAME
+
+# Function to create panes in a window
+create_grid_in_window() {
+    local rows=$1
+    local cols=$2
+    
+    # Create horizontal splits first (rows)
+    for ((r=1; r<rows; r++)); do
+        # Calculate percentage for even splits
+        percentage=$((100 - (100 / (rows - r + 1))))
+        tmux split-window -v -p $percentage
+    done
+    
+    # Now split each row into columns
+    # Total panes after row splits
+    total_row_panes=$rows
+    
+    for ((pane=0; pane<total_row_panes; pane++)); do
+        # Select the pane
+        tmux select-pane -t $pane
+        
+        # Create column splits in this pane (except the last column)
+        for ((c=1; c<cols; c++)); do
+            percentage=$((100 - (100 / (cols - c + 1))))
+            tmux split-window -h -p $percentage
         done
     done
-fi
+    
+    # Select first pane
+    tmux select-pane -t 0
+}
 
-echo "Done!"
+# Create the grid
+create_grid_in_window $ROWS $COLS
 
-# Optional: Force white text color in all new terminals
-if [ "$TERMINAL" = "gnome-terminal" ]; then
-    echo "Setting white text color for terminals..."
-    sleep 1
-    # Send escape sequence to set white foreground to all new terminals
-    for ((i=0; i<${#WINDOW_IDS[@]}; i++)); do
-        if [ "$HAS_XDOTOOL" = true ] && [ ! -z "${WINDOW_IDS[$i]}" ]; then
-            # Focus window and send color reset sequence
-            xdotool windowfocus "${WINDOW_IDS[$i]}" 2>/dev/null
-            xdotool type --delay 0 \e[37m\e[0m' 2>/dev/null
-        fi
-    done
-fi
+# Optional: Run a command in each pane (uncomment and modify as needed)
+# TOTAL_PANES=$((ROWS * COLS))
+# for ((i=0; i<TOTAL_PANES; i++)); do
+#     tmux send-keys -t $SESSION_NAME:0.$i "echo 'Pane $i'" C-m
+# done
 
-# Optional: Focus on the first terminal
-if [ "$HAS_XDOTOOL" = true ] && [ ${#WINDOW_IDS[@]} -gt 0 ]; then
-    xdotool windowfocus "${WINDOW_IDS[0]}" 2>/dev/null
-fi
+# Attach to the session
+echo "Attaching to tmux session..."
+tmux attach-session -t $SESSION_NAME
+
+# Note: When you're done, you can exit tmux with Ctrl-B then D (detach)
+# Or kill the session with: tmux kill-session -t $SESSION_NAME
