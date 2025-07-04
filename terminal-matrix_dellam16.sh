@@ -33,9 +33,4 @@ for ((r=0; r<ROWS; r++)); do
 done
 
 echo "Opened $((ROWS*COLS)) windows (${WIDTH}×${HEIGHT} chars)"
-echo ""
-echo "If windows are too small:"
-echo "  1. Edit script: increase WIDTH and HEIGHT"
-echo "  2. Or reduce grid size: $0 2 2"
-echo ""
 echo "Close all: pkill konsole"
