@@ -1,155 +1,136 @@
 #!/bin/bash
 
+# Terminal grid script for Linux
 ROWS=${1:-2}
 COLS=${2:-2}
 
 echo "Arranging Terminal in ${ROWS}x${COLS} grid..."
 
-# Check if wmctrl is installed
-if ! command -v wmctrl &> /dev/null; then
-    echo ""
-    echo "WARNING: wmctrl is not installed. Windows will open but won't be automatically arranged."
-    echo ""
-    echo "To install wmctrl on RHEL 9.5:"
-    echo "  sudo dnf install wmctrl"
-    echo "  # or"
-    echo "  sudo yum install wmctrl"
-    echo ""
-    echo "Continuing without automatic arrangement..."
-    echo ""
-    ARRANGE_WINDOWS=false
-else
-    ARRANGE_WINDOWS=true
-fi
-
-# Check for X11 display
-if [ -z "$DISPLAY" ]; then
-    echo "Error: No X11 display found. Are you running this in a graphical session?"
-    exit 1
-fi
-
-# Detect terminal emulator
-TERMINAL=""
-for term in gnome-terminal konsole xfce4-terminal mate-terminal xterm; do
-    if command -v $term &> /dev/null; then
-        TERMINAL=$term
-        break
+# Function to detect available terminal emulator
+detect_terminal() {
+    if command -v gnome-terminal >/dev/null 2>&1; then
+        echo "gnome-terminal"
+    elif command -v xterm >/dev/null 2>&1; then
+        echo "xterm"
+    elif command -v konsole >/dev/null 2>&1; then
+        echo "konsole"
+    elif command -v xfce4-terminal >/dev/null 2>&1; then
+        echo "xfce4-terminal"
+    elif command -v mate-terminal >/dev/null 2>&1; then
+        echo "mate-terminal"
+    else
+        echo "none"
     fi
-done
+}
 
-if [ -z "$TERMINAL" ]; then
-    echo "Error: No supported terminal emulator found"
+# Function to get screen dimensions
+get_screen_size() {
+    if command -v xrandr >/dev/null 2>&1; then
+        # Get primary display resolution
+        xrandr | grep primary | head -1 | sed 's/.*primary \([0-9]*\)x\([0-9]*\).*/\1 \2/'
+    else
+        # Fallback to common resolution
+        echo "1920 1080"
+    fi
+}
+
+TERMINAL=$(detect_terminal)
+
+if [ "$TERMINAL" = "none" ]; then
+    echo "Error: No supported terminal emulator found!"
+    echo "Supported: gnome-terminal, xterm, konsole, xfce4-terminal, mate-terminal"
     exit 1
 fi
 
 echo "Using terminal: $TERMINAL"
 
 # Get screen dimensions
-if command -v xrandr &> /dev/null; then
-    # Get primary monitor dimensions
-    SCREEN_INFO=$(xrandr | grep ' connected primary' || xrandr | grep ' connected' | head -1)
-    RESOLUTION=$(echo "$SCREEN_INFO" | grep -oP '\d+x\d+\+\d+\+\d+' | head -1 | cut -d'+' -f1)
-    SCREEN_WIDTH=$(echo "$RESOLUTION" | cut -d'x' -f1)
-    SCREEN_HEIGHT=$(echo "$RESOLUTION" | cut -d'x' -f2)
-elif command -v xdpyinfo &> /dev/null; then
-    SCREEN_WIDTH=$(xdpyinfo | awk '/dimensions/{print $2}' | cut -d'x' -f1)
-    SCREEN_HEIGHT=$(xdpyinfo | awk '/dimensions/{print $2}' | cut -d'x' -f2)
-else
-    # Default fallback
-    SCREEN_WIDTH=1920
-    SCREEN_HEIGHT=1080
-fi
-
-echo "Screen dimensions: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
+read SCREEN_WIDTH SCREEN_HEIGHT <<< $(get_screen_size)
+echo "Screen resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
 
 # Calculate window dimensions
-# Leave some space for taskbar and window decorations
-TASKBAR_HEIGHT=50
-DECORATION_WIDTH=10
-DECORATION_HEIGHT=40
-GAP=5  # Gap between windows
+WINDOW_WIDTH=$((SCREEN_WIDTH / COLS))
+WINDOW_HEIGHT=$((SCREEN_HEIGHT / ROWS))
 
-USABLE_WIDTH=$((SCREEN_WIDTH - (COLS - 1) * GAP))
-USABLE_HEIGHT=$((SCREEN_HEIGHT - TASKBAR_HEIGHT - (ROWS - 1) * GAP))
+# Adjust for window decorations and taskbars
+WINDOW_HEIGHT=$((WINDOW_HEIGHT - 60))  # Account for title bar and taskbar
 
-WIDTH=$((USABLE_WIDTH / COLS - DECORATION_WIDTH))
-HEIGHT=$((USABLE_HEIGHT / ROWS - DECORATION_HEIGHT))
-
-# Create windows
 TOTAL=$((ROWS * COLS))
-WINDOW_PIDS=()
 
-echo "Creating $TOTAL terminal windows..."
-
-for ((i=1; i<=TOTAL; i++)); do
+# Function to launch terminal with geometry
+launch_terminal() {
+    local x=$1
+    local y=$2
+    local width=$3
+    local height=$4
+    
     case $TERMINAL in
-        gnome-terminal)
-            gnome-terminal --title="Terminal $i" --window &
+        "gnome-terminal")
+            gnome-terminal --geometry="${width}x${height}+${x}+${y}" >/dev/null 2>&1 &
             ;;
-        konsole)
-            konsole --title "Terminal $i" &
+        "xterm")
+            xterm -geometry "${width}x${height}+${x}+${y}" >/dev/null 2>&1 &
             ;;
-        xfce4-terminal)
-            xfce4-terminal --title="Terminal $i" &
+        "konsole")
+            konsole --geometry "${width}x${height}+${x}+${y}" >/dev/null 2>&1 &
             ;;
-        mate-terminal)
-            mate-terminal --title="Terminal $i" &
+        "xfce4-terminal")
+            xfce4-terminal --geometry="${width}x${height}+${x}+${y}" >/dev/null 2>&1 &
             ;;
-        xterm)
-            xterm -title "Terminal $i" &
+        "mate-terminal")
+            mate-terminal --geometry="${width}x${height}+${x}+${y}" >/dev/null 2>&1 &
+            ;;
+    esac
+}
+
+# Create grid of terminals
+for ((r=0; r<ROWS; r++)); do
+    for ((c=0; c<COLS; c++)); do
+        X=$((c * WINDOW_WIDTH))
+        Y=$((r * WINDOW_HEIGHT + 30))  # Add offset for menu bar
+        
+        echo "Creating terminal at position (${X}, ${Y}) with size ${WINDOW_WIDTH}x${WINDOW_HEIGHT}"
+        
+        # For gnome-terminal, we need character-based dimensions
+        if [ "$TERMINAL" = "gnome-terminal" ]; then
+            # Convert pixel dimensions to character dimensions (approximate)
+            CHAR_WIDTH=$((WINDOW_WIDTH / 8))   # Approximate character width
+            CHAR_HEIGHT=$((WINDOW_HEIGHT / 16)) # Approximate character height
+            launch_terminal $X $Y $CHAR_WIDTH $CHAR_HEIGHT
+        else
+            launch_terminal $X $Y $WINDOW_WIDTH $WINDOW_HEIGHT
+        fi
+        
+        sleep 0.5  # Give time for window to appear
+    done
+done
+
+echo "Done! Created ${TOTAL} terminal windows in ${ROWS}x${COLS} grid."
+
+# Optional: If wmctrl is available, we can fine-tune positioning
+if command -v wmctrl >/dev/null 2>&1; then
+    echo "Fine-tuning window positions with wmctrl..."
+    sleep 2  # Wait for all windows to appear
+    
+    # Get list of terminal windows
+    case $TERMINAL in
+        "gnome-terminal")
+            WINDOW_CLASS="gnome-terminal-server"
+            ;;
+        "xterm")
+            WINDOW_CLASS="xterm"
+            ;;
+        "konsole")
+            WINDOW_CLASS="konsole"
+            ;;
+        *)
+            WINDOW_CLASS="terminal"
             ;;
     esac
     
-    WINDOW_PIDS+=($!)
-    sleep 0.3  # Give window time to open
-done
-
-# Wait a bit for all windows to be created
-sleep 1
-
-# Arrange windows if wmctrl is available
-if [ "$ARRANGE_WINDOWS" = true ]; then
-    echo "Arranging windows..."
-    
-    # Get list of our terminal windows
-    # Filter by the terminal application name and sort by creation time
-    WINDOW_LIST=$(wmctrl -l -p | grep -i "$TERMINAL" | tail -$TOTAL)
-    
-    # Convert to array of window IDs
-    WINDOW_IDS=()
-    while IFS= read -r line; do
-        WID=$(echo "$line" | awk '{print $1}')
-        WINDOW_IDS+=("$WID")
-    done <<< "$WINDOW_LIST"
-    
-    # Position windows in grid
-    WINDOW_INDEX=0
-    for ((r=0; r<ROWS; r++)); do
-        for ((c=0; c<COLS; c++)); do
-            if [ $WINDOW_INDEX -lt ${#WINDOW_IDS[@]} ]; then
-                X=$((c * (WIDTH + DECORATION_WIDTH + GAP)))
-                Y=$((r * (HEIGHT + DECORATION_HEIGHT + GAP)))
-                
-                # Move and resize window
-                # Format: gravity,x,y,width,height
-                wmctrl -i -r "${WINDOW_IDS[$WINDOW_INDEX]}" -e 0,$X,$Y,$WIDTH,$HEIGHT
-                
-                WINDOW_INDEX=$((WINDOW_INDEX + 1))
-            fi
-        done
+    # Reposition windows more precisely
+    wmctrl -l | grep -i "$WINDOW_CLASS" | tail -n $TOTAL | while read -r line; do
+        WINDOW_ID=$(echo "$line" | awk '{print $1}')
+        # You can add more precise positioning here if needed
     done
-    
-    echo "Done! Windows arranged in ${ROWS}x${COLS} grid."
-else
-    echo "Done! $TOTAL terminal windows opened."
-    echo "Please arrange them manually or install wmctrl for automatic arrangement."
-fi
-
-echo ""
-echo "Tips:"
-echo "  • Switch windows: Alt+Tab"
-echo "  • Switch to specific window: Click with mouse"
-if [ "$TERMINAL" = "gnome-terminal" ]; then
-    echo "  • New tab in window: Ctrl+Shift+T"
-    echo "  • Close tab/window: Ctrl+Shift+W"
 fi
