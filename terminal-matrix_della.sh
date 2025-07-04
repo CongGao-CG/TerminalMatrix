@@ -12,14 +12,14 @@ if ! command -v konsole &> /dev/null; then
 fi
 
 WIDTH=$((1726 / COLS))
-HEIGHT=$((992 / ROWS))
-wHEIGHT=$((992 / ROWS - 30))
+HEIGHT=$((820 / ROWS))
+wHEIGHT=$((820 / ROWS - 28))
 # Launch windows
 N=1
 for ((r=0; r<ROWS; r++)); do
     for ((c=0; c<COLS; c++)); do
         X=$(( c * WIDTH))
-        Y=$(( r * HEIGHT))
+        Y=$(( r * HEIGHT + 28))
         
         konsole \
             --separate \
