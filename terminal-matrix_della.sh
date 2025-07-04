@@ -5,10 +5,23 @@ COLS=${2:-2}
 
 echo "Arranging Terminal in ${ROWS}x${COLS} grid..."
 
+# Preserve terminal environment variables
+export TERM="${TERM:-xterm-256color}"
+export COLORTERM="${COLORTERM}"
+
+# Ensure X resources are loaded (for xterm/urxvt)
+if [ -f "$HOME/.Xresources" ] && command -v xrdb &> /dev/null; then
+    xrdb -merge "$HOME/.Xresources" 2>/dev/null
+fi
+
 # Detect available terminal emulator
 TERMINAL=""
 if command -v gnome-terminal &> /dev/null; then
     TERMINAL="gnome-terminal"
+    # Try to detect current profile for gnome-terminal
+    if [ -n "$GNOME_TERMINAL_PROFILE" ]; then
+        TERMINAL_PROFILE="--profile=$GNOME_TERMINAL_PROFILE"
+    fi
 elif command -v konsole &> /dev/null; then
     TERMINAL="konsole"
 elif command -v xterm &> /dev/null; then
@@ -75,22 +88,26 @@ open_terminal_with_geometry() {
             # gnome-terminal uses character-based geometry
             local cols=$((w / 8))  # Approximate character width
             local rows=$((h / 16)) # Approximate character height
-            gnome-terminal --geometry="${cols}x${rows}+${x}+${y}" &
+            # Use --window to ensure profile is loaded
+            gnome-terminal --window --geometry="${cols}x${rows}+${x}+${y}" &
             ;;
         konsole)
-            konsole --geometry "${w}x${h}+${x}+${y}" &
+            # Load default profile
+            konsole --profile "$USER" --geometry "${w}x${h}+${x}+${y}" &
             ;;
         xterm)
             # xterm uses character-based geometry
             local cols=$((w / 8))
             local rows=$((h / 16))
-            xterm -geometry "${cols}x${rows}+${x}+${y}" &
+            # Load X resources for proper colors
+            xterm -ls -geometry "${cols}x${rows}+${x}+${y}" &
             ;;
         urxvt)
             # urxvt uses character-based geometry
             local cols=$((w / 8))
             local rows=$((h / 16))
-            urxvt -geometry "${cols}x${rows}+${x}+${y}" &
+            # Load X resources
+            urxvt -ls -geometry "${cols}x${rows}+${x}+${y}" &
             ;;
         terminator)
             terminator --geometry="${w}x${h}+${x}+${y}" &
@@ -147,16 +164,16 @@ else
     for ((i=1; i<=TOTAL; i++)); do
         case $TERMINAL in
             gnome-terminal)
-                gnome-terminal &
+                gnome-terminal --window &
                 ;;
             konsole)
-                konsole &
+                konsole --profile "$USER" &
                 ;;
             xterm)
-                xterm &
+                xterm -ls &
                 ;;
             urxvt)
-                urxvt &
+                urxvt -ls &
                 ;;
             terminator)
                 terminator &
