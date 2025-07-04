@@ -3,136 +3,137 @@
 ROWS=${1:-2}
 COLS=${2:-2}
 
-echo "Arranging Terminal in ${ROWS}x${COLS} grid..."
+echo "Terminal Grid Launcher for Restricted Environments"
+echo "=================================================="
 
-# Check for required tools
-if ! command -v wmctrl &> /dev/null && ! command -v xdotool &> /dev/null; then
-    echo "Error: Please install wmctrl or xdotool for window management"
-    echo "  Ubuntu/Debian: sudo apt-get install wmctrl"
-    echo "  Fedora: sudo dnf install wmctrl"
-    echo "  Arch: sudo pacman -S wmctrl"
-    exit 1
-fi
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-# Detect terminal emulator
-TERMINAL=""
-for term in gnome-terminal konsole xfce4-terminal mate-terminal lxterminal xterm; do
-    if command -v $term &> /dev/null; then
-        TERMINAL=$term
-        break
-    fi
-done
-
-if [ -z "$TERMINAL" ]; then
-    echo "Error: No supported terminal emulator found"
-    exit 1
-fi
-
-echo "Using terminal: $TERMINAL"
-
-# Get screen dimensions
-if command -v xdpyinfo &> /dev/null; then
-    SCREEN_WIDTH=$(xdpyinfo | awk '/dimensions/{print $2}' | cut -d'x' -f1)
-    SCREEN_HEIGHT=$(xdpyinfo | awk '/dimensions/{print $2}' | cut -d'x' -f2)
-elif command -v xrandr &> /dev/null; then
-    SCREEN_DIMS=$(xrandr | grep -o 'current [0-9]* x [0-9]*' | awk '{print $2, $4}')
-    SCREEN_WIDTH=$(echo $SCREEN_DIMS | cut -d' ' -f1)
-    SCREEN_HEIGHT=$(echo $SCREEN_DIMS | cut -d' ' -f2)
-else
-    # Default fallback dimensions
-    SCREEN_WIDTH=1920
-    SCREEN_HEIGHT=1080
-fi
-
-# Calculate window dimensions
-WIDTH=$((SCREEN_WIDTH / COLS))
-HEIGHT=$((SCREEN_HEIGHT / ROWS))
-
-# Account for window decorations and panels (adjust these values as needed)
-WIDTH=$((WIDTH - 10))
-HEIGHT=$((HEIGHT - 50))
-
-# Create and position windows
-TOTAL=$((ROWS * COLS))
-WINDOW_IDS=()
-
-for ((i=1; i<=TOTAL; i++)); do
-    # Open new terminal window
-    case $TERMINAL in
-        gnome-terminal)
-            gnome-terminal --geometry=80x24 &
-            ;;
-        konsole)
-            konsole --geometry=80x24 &
-            ;;
-        xfce4-terminal)
-            xfce4-terminal --geometry=80x24 &
-            ;;
-        mate-terminal)
-            mate-terminal --geometry=80x24 &
-            ;;
-        lxterminal)
-            lxterminal --geometry=80x24 &
-            ;;
-        xterm)
-            xterm -geometry 80x24 &
-            ;;
-    esac
+# Option 1: Use tmux if available
+if command_exists tmux; then
+    echo "Found tmux - creating ${ROWS}x${COLS} grid..."
     
-    sleep 0.5
+    SESSION_NAME="grid-$$"
     
-    # Get the window ID of the most recently created window
-    if command -v wmctrl &> /dev/null; then
-        WINDOW_ID=$(wmctrl -l | tail -1 | awk '{print $1}')
-        WINDOW_IDS+=("$WINDOW_ID")
-    fi
-done
-
-# Wait a bit for all windows to fully open
-sleep 1
-
-# Position windows
-if command -v wmctrl &> /dev/null; then
-    WINDOW_INDEX=0
+    # Create new tmux session
+    tmux new-session -d -s "$SESSION_NAME"
+    
+    # Create the grid layout
     for ((r=0; r<ROWS; r++)); do
         for ((c=0; c<COLS; c++)); do
-            if [ $WINDOW_INDEX -lt ${#WINDOW_IDS[@]} ]; then
-                X=$((c * WIDTH))
-                Y=$((r * HEIGHT))
-                
-                # Move and resize window
-                wmctrl -i -r "${WINDOW_IDS[$WINDOW_INDEX]}" -e 0,$X,$Y,$WIDTH,$HEIGHT
-                
-                WINDOW_INDEX=$((WINDOW_INDEX + 1))
+            if [ $r -eq 0 ] && [ $c -eq 0 ]; then
+                # First pane already exists
+                continue
+            elif [ $c -eq 0 ]; then
+                # New row - split horizontally
+                tmux split-window -v -t "$SESSION_NAME"
+                tmux select-layout -t "$SESSION_NAME" tiled
+            else
+                # Same row - split vertically
+                tmux split-window -h -t "$SESSION_NAME"
+                tmux select-layout -t "$SESSION_NAME" tiled
             fi
         done
     done
-elif command -v xdotool &> /dev/null; then
-    # Alternative using xdotool
-    echo "Using xdotool for positioning (less precise)..."
     
-    # Get all terminal windows
-    WINDOW_LIST=$(xdotool search --class "$TERMINAL" | tail -$TOTAL)
+    # Arrange panes evenly
+    tmux select-layout -t "$SESSION_NAME" tiled
     
-    WINDOW_INDEX=0
-    for ((r=0; r<ROWS; r++)); do
-        for ((c=0; c<COLS; c++)); do
-            if [ $WINDOW_INDEX -lt $TOTAL ]; then
-                X=$((c * WIDTH))
-                Y=$((r * HEIGHT))
-                
-                # Get window ID from list
-                WINDOW_ID=$(echo "$WINDOW_LIST" | sed -n "$((WINDOW_INDEX+1))p")
-                
-                if [ -n "$WINDOW_ID" ]; then
-                    xdotool windowmove "$WINDOW_ID" $X $Y
-                    xdotool windowsize "$WINDOW_ID" $WIDTH $HEIGHT
-                fi
-                
-                WINDOW_INDEX=$((WINDOW_INDEX + 1))
-            fi
-        done
-    done
+    # Attach to session
+    echo "Attaching to tmux session..."
+    tmux attach-session -t "$SESSION_NAME"
+    
+    exit 0
 fi
 
-echo "Done!"
+# Option 2: Use GNU screen if available
+if command_exists screen; then
+    echo "Found screen - creating ${ROWS}x${COLS} grid..."
+    echo ""
+    echo "Note: screen doesn't support automatic grid layouts."
+    echo "Creating a screen session with multiple windows instead."
+    
+    SCREENRC_TEMP="/tmp/screenrc-grid-$$"
+    
+    # Create temporary screenrc
+    cat > "$SCREENRC_TEMP" << EOF
+# Temporary screen configuration for grid
+startup_message off
+caption always "%{= kw}%-w%{= BW}%n %t%{-}%+w %-= %{g}%H %{Y}%l"
+
+# Create windows
+EOF
+    
+    TOTAL=$((ROWS * COLS))
+    for ((i=0; i<TOTAL; i++)); do
+        echo "screen -t \"Window-$((i+1))\"" >> "$SCREENRC_TEMP"
+    done
+    
+    # Start screen with config
+    screen -c "$SCREENRC_TEMP" -S "grid-$$"
+    
+    # Clean up
+    rm -f "$SCREENRC_TEMP"
+    
+    exit 0
+fi
+
+# Option 3: Basic terminal approach (no multiplexer)
+echo "No terminal multiplexer found (tmux or screen)."
+echo ""
+echo "Alternative options:"
+echo ""
+
+# Check if we can at least open multiple terminals
+if [ -n "$DISPLAY" ]; then
+    echo "1. X11 display detected. Trying to open multiple terminal windows..."
+    
+    # Try to find an available terminal emulator
+    for term in xterm rxvt urxvt gnome-terminal konsole xfce4-terminal; do
+        if command_exists "$term"; then
+            echo "   Found: $term"
+            echo "   Opening $((ROWS * COLS)) terminal windows..."
+            
+            for ((i=1; i<=ROWS*COLS; i++)); do
+                case $term in
+                    xterm|rxvt|urxvt)
+                        $term -title "Terminal $i" -geometry 80x24 &
+                        ;;
+                    gnome-terminal|konsole|xfce4-terminal)
+                        $term --title="Terminal $i" &
+                        ;;
+                esac
+                sleep 0.2
+            done
+            
+            echo "   Done! Please arrange windows manually."
+            exit 0
+        fi
+    done
+    
+    echo "   No supported terminal emulator found."
+fi
+
+# Option 4: Suggest installation
+echo "2. To get the best experience, ask your system administrator to install:"
+echo "   - tmux (recommended): Creates proper split-pane layouts"
+echo "   - screen: Creates multiple windows in one terminal"
+echo "   - wmctrl: For automatic window positioning"
+echo ""
+
+# Option 5: Manual instructions
+echo "3. Manual alternative - use your terminal's built-in features:"
+echo "   - Many terminals support tabs (Ctrl+Shift+T)"
+echo "   - Some support split panes (varies by terminal)"
+echo "   - SSH clients like PuTTY can save multiple sessions"
+echo ""
+
+# Option 6: Check for module system (common on HPC)
+if command_exists module; then
+    echo "4. Module system detected. Try:"
+    echo "   module avail tmux"
+    echo "   module avail screen"
+    echo "   module load tmux  # if available"
+fi
