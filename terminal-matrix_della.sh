@@ -11,22 +11,19 @@ if ! command -v konsole &> /dev/null; then
     exit 1
 fi
 
-TERM_COLS=$((1726 / COLS))
-TERM_ROWS=$((992 / ROWS))
-
-STEP_X=$((1726 / COLS))
-STEP_Y=$((992 / ROWS))
+WIDTH=$((1726 / COLS))
+HEIGHT=$((992 / ROWS))
 
 # Launch windows
 N=1
 for ((r=0; r<ROWS; r++)); do
     for ((c=0; c<COLS; c++)); do
-        X=$(( c * STEP_X))
-        Y=$(( r * STEP_Y))
+        X=$(( c * WIDTH))
+        Y=$(( r * HEIGHT))
         
         konsole \
             --separate \
-            --geometry "${TERM_COLS}x${TERM_ROWS}+${X}+${Y}" \
+            --geometry "${WIDTH}x${HEIGHT}+${X}+${Y}" \
             --hide-menubar \
             --hide-tabbar &
         
@@ -35,10 +32,10 @@ for ((r=0; r<ROWS; r++)); do
     done
 done
 
-echo "Opened $((ROWS*COLS)) windows (${TERM_COLS}×${TERM_ROWS} chars)"
+echo "Opened $((ROWS*COLS)) windows (${WIDTH}×${HEIGHT} chars)"
 echo ""
 echo "If windows are too small:"
-echo "  1. Edit script: increase TERM_COLS and TERM_ROWS"
+echo "  1. Edit script: increase WIDTH and HEIGHT"
 echo "  2. Or reduce grid size: $0 2 2"
 echo ""
 echo "Close all: pkill konsole"
