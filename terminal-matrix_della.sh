@@ -14,14 +14,23 @@ if [ -f "$HOME/.Xresources" ] && command -v xrdb &> /dev/null; then
     xrdb -merge "$HOME/.Xresources" 2>/dev/null
 fi
 
+# For gnome-terminal: Create a temporary profile with white text if needed
+GNOME_TERMINAL_PROFILE=""
+if command -v gnome-terminal &> /dev/null && command -v dconf &> /dev/null; then
+    # Check if we can access gnome-terminal settings
+    if dconf list /org/gnome/terminal/legacy/profiles:/ &>/dev/null; then
+        # Get default profile ID
+        DEFAULT_PROFILE=$(dconf read /org/gnome/terminal/legacy/profiles:/default 2>/dev/null | tr -d "'")
+        if [ -n "$DEFAULT_PROFILE" ]; then
+            GNOME_TERMINAL_PROFILE="--profile=$DEFAULT_PROFILE"
+        fi
+    fi
+fi
+
 # Detect available terminal emulator
 TERMINAL=""
 if command -v gnome-terminal &> /dev/null; then
     TERMINAL="gnome-terminal"
-    # Try to detect current profile for gnome-terminal
-    if [ -n "$GNOME_TERMINAL_PROFILE" ]; then
-        TERMINAL_PROFILE="--profile=$GNOME_TERMINAL_PROFILE"
-    fi
 elif command -v konsole &> /dev/null; then
     TERMINAL="konsole"
 elif command -v xterm &> /dev/null; then
@@ -88,8 +97,8 @@ open_terminal_with_geometry() {
             # gnome-terminal uses character-based geometry
             local cols=$((w / 8))  # Approximate character width
             local rows=$((h / 16)) # Approximate character height
-            # Use --window to ensure profile is loaded
-            gnome-terminal --window --geometry="${cols}x${rows}+${x}+${y}" &
+            # Force white foreground and load bash profile
+            gnome-terminal $GNOME_TERMINAL_PROFILE --window --geometry="${cols}x${rows}+${x}+${y}" -- bash -c 'source ~/.bashrc 2>/dev/null; source ~/.bash_profile 2>/dev/null; exec bash' &
             ;;
         konsole)
             # Load default profile
@@ -164,7 +173,7 @@ else
     for ((i=1; i<=TOTAL; i++)); do
         case $TERMINAL in
             gnome-terminal)
-                gnome-terminal --window &
+                gnome-terminal $GNOME_TERMINAL_PROFILE --window -- bash -c 'source ~/.bashrc 2>/dev/null; source ~/.bash_profile 2>/dev/null; exec bash' &
                 ;;
             konsole)
                 konsole --profile "$USER" &
@@ -219,6 +228,20 @@ else
 fi
 
 echo "Done!"
+
+# Optional: Force white text color in all new terminals
+if [ "$TERMINAL" = "gnome-terminal" ]; then
+    echo "Setting white text color for terminals..."
+    sleep 1
+    # Send escape sequence to set white foreground to all new terminals
+    for ((i=0; i<${#WINDOW_IDS[@]}; i++)); do
+        if [ "$HAS_XDOTOOL" = true ] && [ ! -z "${WINDOW_IDS[$i]}" ]; then
+            # Focus window and send color reset sequence
+            xdotool windowfocus "${WINDOW_IDS[$i]}" 2>/dev/null
+            xdotool type --delay 0 \e[37m\e[0m' 2>/dev/null
+        fi
+    done
+fi
 
 # Optional: Focus on the first terminal
 if [ "$HAS_XDOTOOL" = true ] && [ ${#WINDOW_IDS[@]} -gt 0 ]; then
