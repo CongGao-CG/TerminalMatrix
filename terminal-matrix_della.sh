@@ -12,8 +12,8 @@ if ! command -v konsole &> /dev/null; then
 fi
 
 WIDTH=$((1726 / COLS))
-HEIGHT=$((600 / ROWS))
-
+HEIGHT=$((992 / ROWS))
+wHEIGHT=$((992 / ROWS - 30))
 # Launch windows
 N=1
 for ((r=0; r<ROWS; r++)); do
@@ -23,7 +23,7 @@ for ((r=0; r<ROWS; r++)); do
         
         konsole \
             --separate \
-            --geometry "${WIDTH}x${HEIGHT}+${X}+${Y}" \
+            --geometry "${WIDTH}x${wHEIGHT}+${X}+${Y}" \
             --hide-menubar \
             --hide-tabbar &
         
