@@ -12,7 +12,7 @@ if ! command -v konsole &> /dev/null; then
 fi
 
 WIDTH=$((1726 / COLS))
-HEIGHT=$((992 / ROWS))
+HEIGHT=$((600 / ROWS))
 
 # Launch windows
 N=1
