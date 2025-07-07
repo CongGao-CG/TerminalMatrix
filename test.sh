@@ -224,8 +224,8 @@ elif [ -n "$CELL_WIDTH" ] && [ -n "$CELL_HEIGHT" ]; then
     # Calculate character dimensions from cell size
     # Each cell has the specified pixel dimensions
     # Character dimensions = window pixels / cell pixels
-    CHAR_WIDTH=$(((WIN_WIDTH - wMARGIN) / CELL_WIDTH))
-    CHAR_HEIGHT=$(((WIN_HEIGHT - hMARGIN) / CELL_HEIGHT))
+    CHAR_WIDTH=$(echo "scale=3; ($WIN_WIDTH - $wMARGIN)/$CELL_WIDTH" | bc -l)
+    CHAR_HEIGHT=$(echo "scale=3; ($WIN_HEIGHT - $hMARGIN)/$CELL_HEIGHT" | bc -l)
     echo "Using cell dimensions: ${CELL_WIDTH}x${CELL_HEIGHT} pixels"
 else
     # Estimate based on font size
