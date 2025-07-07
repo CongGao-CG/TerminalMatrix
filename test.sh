@@ -168,20 +168,14 @@ SCREEN_WIDTH=${SCREEN_WIDTH:-1920}
 SCREEN_HEIGHT=${SCREEN_HEIGHT:-1080}
 
 # Calculate window layout
-wMARGIN=30
-hMARGIN=40
-TASKBAR_HEIGHT=30
-USABLE_WIDTH=$((SCREEN_WIDTH))
-USABLE_HEIGHT=$((SCREEN_HEIGHT - TASKBAR_HEIGHT))
+MARGIN=20
+TASKBAR_HEIGHT=50
+USABLE_WIDTH=$((SCREEN_WIDTH - MARGIN * 2))
+USABLE_HEIGHT=$((SCREEN_HEIGHT - TASKBAR_HEIGHT - MARGIN))
 
 WIN_WIDTH=$((USABLE_WIDTH / COLS))
 WIN_HEIGHT=$((USABLE_HEIGHT / ROWS))
 
-rWIN_WIDTH=$(((WIN_WIDTH - wMARGIN) / 6))
-rWIN_HEIGHT=$(((WIN_HEIGHT - hMARGIN) / 13))
-
-echo $rWIN_WIDTH
-echo $rWIN_HEIGHT
 # Character dimensions (approximate)
 if [ -n "$FORCE_GEOMETRY" ]; then
     CHAR_WIDTH=$(echo $FORCE_GEOMETRY | cut -d'x' -f1)
@@ -221,13 +215,13 @@ launch_xterm() {
     local num=$3
     
     # Calculate position
-    local x=$((col * WIN_WIDTH))
-    local y=$((row * WIN_HEIGHT))
+    local x=$((col * WIN_WIDTH + MARGIN))
+    local y=$((row * WIN_HEIGHT + MARGIN))
     
     # Build xterm command
     local xterm_cmd=(
         xterm
-        -geometry "${rWIN_WIDTH}x${rWIN_HEIGHT}+${x}+${y}"
+        -geometry "${CHAR_WIDTH}x${CHAR_HEIGHT}+${x}+${y}"
         -title "$TITLE_PREFIX $num [$((row+1)),$((col+1))]"
         -bg "$BG_COLOR"
         -fg "$FG_COLOR"
