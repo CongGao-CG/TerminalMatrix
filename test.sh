@@ -180,6 +180,8 @@ WIN_HEIGHT=$((USABLE_HEIGHT / ROWS))
 rWIN_WIDTH=$(((WIN_WIDTH - wMARGIN) / 6))
 rWIN_HEIGHT=$(((WIN_HEIGHT - hMARGIN) / 13))
 
+echo $rWIN_WIDTH
+echo $rWIN_HEIGHT
 # Character dimensions (approximate)
 if [ -n "$FORCE_GEOMETRY" ]; then
     CHAR_WIDTH=$(echo $FORCE_GEOMETRY | cut -d'x' -f1)
