@@ -1,5 +1,11 @@
 #!/bin/bash
 # Xterm grid launcher for HPC systems - Enhanced version
+#
+# Cell dimensions: This script supports manual cell width/height settings
+# A "cell" is a single character space in the terminal. For example:
+# - 8x16 pixels per cell is common for bitmap fonts
+# - 10x20 pixels per cell provides more spacing
+# The script calculates how many characters fit in each window based on these dimensions
 
 # Default grid size
 ROWS=${1:-2}
@@ -18,6 +24,8 @@ COLOR_SCHEME=${XTERM_COLOR:-1}
 FONT_FAMILY=${XTERM_FONT:-"Monospace"}
 FONT_SIZE=${XTERM_FONT_SIZE:-10}
 SCROLLBACK=${XTERM_SCROLLBACK:-10000}
+CELL_WIDTH=${XTERM_CELL_WIDTH:-}   # Cell width in pixels
+CELL_HEIGHT=${XTERM_CELL_HEIGHT:-} # Cell height in pixels
 
 # Help function
 show_help() {
@@ -39,7 +47,20 @@ Options:
     -e, --exec COMMAND      Execute command in each terminal
     -w, --working-dir DIR   Set working directory
     -g, --geometry WxH      Force specific character dimensions
+    --cell-width PIXELS     Set cell width in pixels
+    --cell-height PIXELS    Set cell height in pixels
     -m, --monitor N         Place on monitor N (for multi-monitor setups)
+
+Cell Dimensions:
+    Cell width/height define the pixel size of each character cell.
+    Common values:
+      8x16  - Standard VGA text mode
+      9x16  - Classic terminal fonts
+      10x20 - Modern fonts with good spacing
+      7x14  - Compact display
+    
+    The script calculates terminal size as: window_pixels / cell_pixels
+    For example: 800px window / 10px cells = 80 characters wide
 
 Environment Variables:
     SCREEN_WIDTH           Override detected screen width
@@ -48,6 +69,8 @@ Environment Variables:
     XTERM_FONT            Default font family
     XTERM_FONT_SIZE       Default font size
     XTERM_SCROLLBACK      Scrollback buffer lines
+    XTERM_CELL_WIDTH      Cell width in pixels
+    XTERM_CELL_HEIGHT     Cell height in pixels
 
 Examples:
     $0                    # 2x2 grid with defaults
@@ -55,6 +78,14 @@ Examples:
     $0 2 4 -c 2           # 2x4 grid with Matrix theme
     $0 4 4 -e htop        # 4x4 grid running htop
     $0 2 2 -w /scratch    # 2x2 grid in /scratch directory
+    
+    # Using specific cell dimensions:
+    $0 2 2 --cell-width 8 --cell-height 16   # Standard VGA sizing
+    $0 3 3 --cell-width 10 --cell-height 20  # Larger, easier to read
+    $0 4 2 --cell-width 7 --cell-height 14   # Compact for more content
+    
+    # Combine with font settings for best results:
+    $0 2 2 --cell-width 9 --cell-height 18 -f "DejaVu Sans Mono" -s 12
 
 Color Schemes:
     1 - Classic (black/white)
@@ -106,6 +137,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -g|--geometry)
             FORCE_GEOMETRY="$2"
+            shift 2
+            ;;
+        --cell-width)
+            CELL_WIDTH="$2"
+            shift 2
+            ;;
+        --cell-height)
+            CELL_HEIGHT="$2"
             shift 2
             ;;
         -m|--monitor)
@@ -180,6 +219,13 @@ WIN_HEIGHT=$((USABLE_HEIGHT / ROWS))
 if [ -n "$FORCE_GEOMETRY" ]; then
     CHAR_WIDTH=$(echo $FORCE_GEOMETRY | cut -d'x' -f1)
     CHAR_HEIGHT=$(echo $FORCE_GEOMETRY | cut -d'x' -f2)
+elif [ -n "$CELL_WIDTH" ] && [ -n "$CELL_HEIGHT" ]; then
+    # Calculate character dimensions from cell size
+    # Each cell has the specified pixel dimensions
+    # Character dimensions = window pixels / cell pixels
+    CHAR_WIDTH=$((WIN_WIDTH / CELL_WIDTH))
+    CHAR_HEIGHT=$((WIN_HEIGHT / CELL_HEIGHT))
+    echo "Using cell dimensions: ${CELL_WIDTH}x${CELL_HEIGHT} pixels"
 else
     # Estimate based on font size
     CHAR_PIXELS=$((FONT_SIZE * 7 / 10))  # Rough estimate
@@ -196,6 +242,7 @@ echo "=================================="
 echo "Grid:        ${ROWS}x${COLS} = $((ROWS*COLS)) terminals"
 echo "Screen:      ${SCREEN_WIDTH}x${SCREEN_HEIGHT} pixels"
 echo "Window:      ${CHAR_WIDTH}x${CHAR_HEIGHT} characters"
+[ -n "$CELL_WIDTH" ] && [ -n "$CELL_HEIGHT" ] && echo "Cell size:   ${CELL_WIDTH}x${CELL_HEIGHT} pixels"
 echo "Font:        $FONT_FAMILY $FONT_SIZE pt"
 echo "Colors:      $BG_COLOR (bg) / $FG_COLOR (fg)"
 echo "Scrollback:  $SCROLLBACK lines"
