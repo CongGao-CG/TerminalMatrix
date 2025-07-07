@@ -207,13 +207,14 @@ SCREEN_WIDTH=${SCREEN_WIDTH:-1920}
 SCREEN_HEIGHT=${SCREEN_HEIGHT:-1080}
 
 # Calculate window layout
-MARGIN=20
-TASKBAR_HEIGHT=50
-USABLE_WIDTH=$((SCREEN_WIDTH - MARGIN * 2))
-USABLE_HEIGHT=$((SCREEN_HEIGHT - TASKBAR_HEIGHT - MARGIN))
+wMARGIN=30
+hMARGIN=40
+TASKBAR_HEIGHT=30
+USABLE_WIDTH=$((SCREEN_WIDTH))
+USABLE_HEIGHT=$((SCREEN_HEIGHT - TASKBAR_HEIGHT))
 
-WIN_WIDTH=$((USABLE_WIDTH / COLS))
-WIN_HEIGHT=$((USABLE_HEIGHT / ROWS))
+WIN_WIDTH=$(((USABLE_WIDTH + wMARGIN) / COLS))
+WIN_HEIGHT=$(((USABLE_HEIGHT + hMARGIN) / ROWS))
 
 # Character dimensions (approximate)
 if [ -n "$FORCE_GEOMETRY" ]; then
@@ -223,8 +224,8 @@ elif [ -n "$CELL_WIDTH" ] && [ -n "$CELL_HEIGHT" ]; then
     # Calculate character dimensions from cell size
     # Each cell has the specified pixel dimensions
     # Character dimensions = window pixels / cell pixels
-    CHAR_WIDTH=$((WIN_WIDTH / CELL_WIDTH))
-    CHAR_HEIGHT=$((WIN_HEIGHT / CELL_HEIGHT))
+    CHAR_WIDTH=$(((WIN_WIDTH - wMARGIN) / CELL_WIDTH))
+    CHAR_HEIGHT=$(((WIN_HEIGHT - hMARGIN) / CELL_HEIGHT))
     echo "Using cell dimensions: ${CELL_WIDTH}x${CELL_HEIGHT} pixels"
 else
     # Estimate based on font size
